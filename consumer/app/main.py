@@ -1,4 +1,3 @@
-# TODO: THIS SECTION NEEDS TO BE REGULAR PY NOT FASTAPI
 # 1- read from kafka
 # 2 sort by type
 # 3 enters to sql -> add tables and stuff needed 

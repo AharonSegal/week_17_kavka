@@ -37,8 +37,6 @@ ORDER BY COUNT(orders.orderNumber) DESC;
 ) as sub
 
 
-
-
 """.strip()
 
     rows = db.query(sql)

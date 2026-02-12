@@ -1,80 +1,140 @@
-
 # docker compose up --build
 
 services:
+# +--------------------+
+# |       MONGO        |
+# +--------------------+
+
   mongo:
     image: mongo:7
+    restart: unless-stopped
     ports:
       - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: app
+      MONGO_INITDB_ROOT_PASSWORD: app_pw
+      MONGO_INITDB_DATABASE: suspicious
+    networks:
+      - app-network
 
+# +--------------------+
+# |       MYSQL        |
+# +--------------------+
   mysql:
     image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: test_17
+    restart: unless-stopped
     ports:
-      - "3307:3307"
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: suspicious
+      MYSQL_USER: root
+      MYSQL_ROOT_PASSWORD: root_pwd
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
 
+# +--------------------+
+# |       KAFKA        |
+# +--------------------+
   kafka:
     image: confluentinc/cp-kafka:7.6.1
+    restart: unless-stopped
     ports:
-      - "9092:9092"
-      - "29092:29092"
+      - "9092:9092" # host access (your local FastAPI -> localhost:9092)
     environment:
-      KAFKA_NODE_ID: "1"
+      CLUSTER_ID: "Mf_-9PUJQnCI6eQZzgFTlg"
+
+      KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: "broker,controller"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
-      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
-      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT_INTERNAL"
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
-  service-a:
+      # --- Listeners ---
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+
+      # --- Single-node dev defaults ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - app-network
+
+# +--------------------+
+# |    PRODUCER        |
+# +--------------------+
+  producer:
     build:
-      context: ./service-a
-    environment:
-      SERVICE_B_RECORDS_URL: "http://service-b:8001/records"
-      DATA_FILE_PATH: "data/sample.json"
+      context: ./producer        # Build from local Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    depends_on:
-      - service-b
-
-  service-b:
-    build:
-      context: ./service-b
     environment:
-      MONGO_URI: "mongodb://mongo:27017"
-      MONGO_DB: "raw"
+      MONGO_URI: "mongodb://mongodb:27017"
+      MONGO_DB: "suspicious"
       MONGO_COLLECTION: "records"
       KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
       KAFKA_TOPIC: "raw-records"
-    ports:
-      - "8001:8001"
-    depends_on:
-      - mongo
-      - kafka
+    networks:
+      - app-network
 
-  service-c:
+# +--------------------+
+# |     CONSUMER       |
+# +--------------------+
+  consumer:
     build:
-      context: ./service-c
+      context: ./consumer            # Build from local Dockerfile
+      dockerfile: Dockerfile
     environment:
       KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
       KAFKA_TOPIC: "raw-records"
       KAFKA_GROUP_ID: "mysql-loader"
       DB_HOST: "mysql"
       DB_PORT: "3306"
-      DB_USER: "root"
-      DB_PASSWORD: "root"
-      DB_NAME: "classicmodels"
+      MYSQL_DATABASE: suspicious
+      MYSQL_USER: root
+      MYSQL_ROOT_PASSWORD: root_pwd
+    networks:
+      - app-network
+
+# +--------------------+
+# |    ANALYTICS API   |
+# +--------------------+
+  analytics-api:
+    build:
+      context: ./analytics-api       # Build from local Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8002:8002"
-    depends_on:
-      - mysql
-      - kafka
+    environment:
+      DB_HOST: "mysql"
+      DB_PORT: "3306"
+      MYSQL_DATABASE: suspicious
+      MYSQL_USER: root
+      MYSQL_ROOT_PASSWORD: root_pwd
+    networks:
+      - app-network
+
+
+volumes:
+  mongo_data:
+  mysql_data:
+
+
+networks:
+  app-network:
+    driver: bridge        
+    driver_opts:
+      com.docker.network.bridge.name: app_br
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

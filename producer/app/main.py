@@ -6,8 +6,9 @@ and send it to kafka
     and during each batch sends each document individually in 0.5 second intervals
 """
 
+
 from fastapi import FastAPI
-from router import router
+from routes import router
 
 app = FastAPI()
 app.include_router(router)

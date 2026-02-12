@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 """
 
+# TODO TEST FOR FK
+#   CONSTRAINT orders_customerNumber_fk FOREIGN KEY (customerNumber) REFERENCES customers(customerNumber)
+
 create_orders_table_sql = """
 CREATE TABLE IF NOT EXISTS orders (
   orderNumber INT NOT NULL,
@@ -31,7 +34,6 @@ CREATE TABLE IF NOT EXISTS orders (
   comments TEXT NULL,
   customerNumber INT NOT NULL,
   PRIMARY KEY (orderNumber),
-  CONSTRAINT orders_customerNumber_fk FOREIGN KEY (customerNumber) REFERENCES customers(customerNumber)
 );
 """
 
