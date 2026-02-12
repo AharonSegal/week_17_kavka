@@ -1,0 +1,17 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+venv
+.env.*
+.idea
+.vscode
+.mypy_cache
+.pytest_cache
+data/*
+screenshots/*
+k8s/*
+.arc
+arc

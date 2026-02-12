@@ -1,0 +1,80 @@
+
+# docker compose up --build
+
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: test_17
+    ports:
+      - "3307:3307"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT_INTERNAL"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  service-a:
+    build:
+      context: ./service-a
+    environment:
+      SERVICE_B_RECORDS_URL: "http://service-b:8001/records"
+      DATA_FILE_PATH: "data/sample.json"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - service-b
+
+  service-b:
+    build:
+      context: ./service-b
+    environment:
+      MONGO_URI: "mongodb://mongo:27017"
+      MONGO_DB: "raw"
+      MONGO_COLLECTION: "records"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      KAFKA_TOPIC: "raw-records"
+    ports:
+      - "8001:8001"
+    depends_on:
+      - mongo
+      - kafka
+
+  service-c:
+    build:
+      context: ./service-c
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      KAFKA_TOPIC: "raw-records"
+      KAFKA_GROUP_ID: "mysql-loader"
+      DB_HOST: "mysql"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASSWORD: "root"
+      DB_NAME: "classicmodels"
+    ports:
+      - "8002:8002"
+    depends_on:
+      - mysql
+      - kafka
